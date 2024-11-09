@@ -1,0 +1,29 @@
+---
+- name: Upload backups to Git
+  hosts: localhost
+  tasks:
+    - name: Set the new remote repository
+      command: git remote set-url origin git@github.com:yonitermi/Kadabera_Ansible.git
+      args:
+        chdir: /home/nouser/backups/ansible_BU
+
+    - name: Add all backup files to Git
+      command: git add -A
+      args:
+        chdir: /home/nouser/backups/ansible_BU
+
+    - name: Commit backup files to Git (force commit)
+      command: git commit -m "Backup on {{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}"
+      args:
+        chdir: /home/nouser/backups/ansible_BU
+      ignore_errors: yes
+
+    - name: Push backup files to remote repository
+      command: git push origin master
+      args:
+        chdir: /home/nouser/backups/ansible_BU
+
+    - name: Print Git status
+      debug:
+        msg: "Backups have been successfully uploaded to Git!"
+

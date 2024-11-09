@@ -1,0 +1,40 @@
+---
+- name: Backup MySQL database and WordPress folder
+  hosts: localhost
+  become: yes
+  tasks:
+    - name: Create backup directories if they don't exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /home/nouser/backups/ansible_BU/ansible_mysql_bu
+        - /home/nouser/backups/ansible_BU/ansible_wordP_bu
+
+    - name: Load environment variables from .env file
+      command: bash -c 'set -a && source /home/nouser/yoni-wordpress/.env && env'
+      register: env_output
+
+    - name: Set MySQL environment variables
+      set_fact:
+        MYSQL_USER: "{{ env_output.stdout_lines | select('match', '^MYSQL_USER=') | list | first | regex_replace('MYSQL_USER=', '') }}"
+        MYSQL_PASSWORD: "{{ env_output.stdout_lines | select('match', '^MYSQL_PASSWORD=') | list | first | regex_replace('MYSQL_PASSWORD=', '') }}"
+        MYSQL_DATABASE: "{{ env_output.stdout_lines | select('match', '^MYSQL_DATABASE=') | list | first | regex_replace('MYSQL_DATABASE=', '') }}"
+
+    - name: Backup MySQL database to SQL file
+      shell: >
+        docker exec yoni-wordpress-mysql-1 mysqldump -u {{ MYSQL_USER }} --password={{ MYSQL_PASSWORD }} {{ MYSQL_DATABASE }} > /home/nouser/backups/ansible_BU/ansible_mysql_bu/db-backup-{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}.sql
+
+    - name: Compress MySQL backup into a tar.gz file and remove the original SQL file
+      shell: >
+        tar -cvf /home/nouser/backups/ansible_BU/ansible_mysql_bu/db-backup-{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}.tar -C /home/nouser/backups/ansible_BU/ansible_mysql_bu db-backup-{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}.sql && rm /home/nouser/backups/ansible_BU/ansible_mysql_bu/db-backup-{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}.sql && gzip /home/nouser/backups/ansible_BU/ansible_mysql_bu/db-backup-{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}.tar
+
+    - name: Backup and compress WordPress volume
+      shell: >
+        docker run --rm --volumes-from yoni-wordpress-wordpress-1 -v /home/nouser/backups/ansible_BU/ansible_wordP_bu:/backup ubuntu tar cvf /backup/wordpress-backup-{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}.tar /var/www/html && gzip /home/nouser/backups/ansible_BU/ansible_wordP_bu/wordpress-backup-{{ ansible_date_time.date }}-{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}.tar
+
+    - name: Print message
+      debug:
+        msg: "Backup tasks completed successfully!"
+
